@@ -11,8 +11,8 @@ export interface Params {
 export const DEFAULT_PARAMS: Params = {
   feeBps: 200n,
   maxProfitBps: 50_000n,
-  fundingK: 1_000n,
-  fundingMaxBps: 500n,
+  fundingK: 500n,       // chosen after simulation: see docs/funding-simulation.md
+  fundingMaxBps: 250n,
   fundingCapBps: 5_000n,
   tieBps: 1n,
 };

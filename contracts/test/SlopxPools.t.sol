@@ -29,6 +29,26 @@ contract SlopxPoolsTest is Test {
         pool = new SlopxPools(G, D, keeper, guardian, treasury);
         mkt = pool.addMarket("TRENCH24");
         vm.deal(alice, 1000 ether); vm.deal(bob, 1000 ether); vm.deal(carol, 1000 ether);
+        // most unit tests exercise the maths with larger sizes; launch defaults are tested separately
+        pool.setLimits(0.01 ether, 10 ether, 500 ether);
+    }
+
+    function test_launchDefaultsAreLow() public {
+        SlopxPools fresh = new SlopxPools(G, D, keeper, guardian, treasury);
+        uint256 m = fresh.addMarket("X");
+        assertEq(fresh.maxWalletPerRound(), 1 ether);
+        assertEq(fresh.maxSidePerRound(), 25 ether);
+        vm.prank(alice);
+        vm.expectRevert(SlopxPools.CapExceeded.selector);
+        fresh.deposit{value: 1.01 ether}(m, 0, SlopxPools.Side.Short);
+        vm.prank(alice); fresh.deposit{value: 1 ether}(m, 0, SlopxPools.Side.Short);
+    }
+
+    function test_limitCeilings() public {
+        vm.expectRevert(SlopxPools.BadParam.selector);
+        pool.setLimits(0.01 ether, 11 ether, 500 ether);
+        vm.expectRevert(SlopxPools.BadParam.selector);
+        pool.setLimits(0.01 ether, 10 ether, 501 ether);
     }
 
     function _dep(address u, uint256 r, SlopxPools.Side s, uint256 a) internal {
@@ -64,12 +84,12 @@ contract SlopxPoolsTest is Test {
     function test_shortWins_withFunding() public {
         _dep(alice, 0, SlopxPools.Side.Long, 1 ether);
         _dep(bob, 0, SlopxPools.Side.Short, 3 ether);
-        // skew 50% -> rate 5% (k=1000 => 10%*0.5) capped at 5% => f = 0.15
+        // skew 50% -> rate = 5% * 0.5 = 2.5% (= max 2.5%) of 3 => f = 0.075
         (uint256 eL, uint256 eS) = pool.fundingFor(mkt, 0);
-        assertEq(eL, 1.15 ether); assertEq(eS, 2.85 ether);
+        assertEq(eL, 1.075 ether); assertEq(eS, 2.925 ether);
         _finish(0, 0.9e18);
-        // shorts win effL 1.15 ; fee 2% => 0.023
-        assertEq(pool.claimable(mkt, 0, bob), 2.85 ether + 1.15 ether - 0.023 ether);
+        // shorts win effL 1.075 ; fee 2% => 0.0215
+        assertEq(pool.claimable(mkt, 0, bob), 2.925 ether + 1.075 ether - 0.0215 ether);
         assertEq(pool.claimable(mkt, 0, alice), 0);
     }
 

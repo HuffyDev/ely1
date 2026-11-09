@@ -2,11 +2,11 @@
 
 SLOPX lets you bet whether the Elysium trenches go up or down over the next hour. You can also bet on whether one launchpad's coins beat another's.
 
-<div class="callout">You can lose your entire deposit. SLOPX is unaudited, experimental software. Read the <a href="#/terms">Terms &amp; Risk</a> page before using it.</div>
+<div class="callout">You can lose your entire deposit. SLOPX is unaudited, experimental software. Read the <a href="#/trust">Rules &amp; Risk</a> page before using it.</div>
 
 ## The short version
 
-1. **Pick a market.** `TRENCH24` tracks every token launched on Elysium in the past 24 hours. `MONTRA/ASCEND` compares Montra launches with Ascend launches.
+1. **Pick a market.** `TRENCH24` tracks every token launched on Elysium in the past 24 hours, read directly from the Uniswap v4 pools they launch into. Pair markets such as `MONTRA/ASCEND` compare one launchpad's coins with another's. They activate once the launchpad addresses are verified, and refund until then.
 2. **Pick a side and deposit HYPE** into the *next* hourly round. Deposits close 60 seconds before the round starts.
 3. **The round runs for one hour.** The constituent list is frozen at the start.
 4. **At the end,** the keeper posts the result: the median return of the constituents over the hour.
@@ -25,7 +25,7 @@ The more lopsided the pool, the better the odds for the unpopular side. The mark
 
 Most people will want to short. On top of the odds above, the side with more money pays the other side a **funding** charge, whatever the outcome:
 
-- rate = 10% × skew, capped at 5% of the crowded side's stake
+- rate = 5% × skew, capped at 2.5% of the crowded side's stake
 - the minority side can receive at most 50% of its own stake this way
 
 This is a transfer between depositors. It is never new money. See [funding design and simulation](#/docs/funding).
@@ -37,8 +37,8 @@ The code is new and unaudited, so it limits exposure:
 | Limit | Default |
 |---|---|
 | Minimum deposit | 0.01 HYPE |
-| Max per wallet, per market, per round | 10 HYPE |
-| Max per side, per market, per round | 500 HYPE |
+| Max per wallet, per market, per round | 1 HYPE |
+| Max per side, per market, per round | 25 HYPE |
 | Max gross profit | 5× your effective stake (excess goes back to the losers) |
 
 ## When you get your money back (refunds)

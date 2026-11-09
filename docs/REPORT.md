@@ -1,90 +1,118 @@
-# SLOPX build report (9 Nov 2026)
+# SLOPX build report — second pass (9 Nov 2026)
 
-## 1. Research findings
+## 0. Honest audit of the first pass (before this pass's changes)
 
-Elysium mainnet reportedly launches today, so a lot is still unpublished. "Unverified" below means I could not confirm it and **you must check it before relying on it.**
-
-| Item | Finding | Status |
-|---|---|---|
-| Elysium is EVM-compatible, settles to HyperEVM, HYPE gas | Arbitrum Orbit chain that settles to HyperEVM. Testnet settles to HyperEVM testnet (998) | Confirmed (Bankless, Chainstack, Alchemy) |
-| Chain ID 99901 vs 99801 | **99801 is the testnet.** No public source gives the mainnet ID, so 99901 is unconfirmed | Mainnet ID **unverified**. The code uses `CHAIN_ID` from env |
-| Testnet RPC / explorer | `https://testnet-rpc.elysium.kinetiq.xyz`, Alchemy `elysium-testnet.g.alchemy.com`, explorer `explorer-elysium-testnet.t.conduit.xyz` | Third-party sources |
-| viem `elysiumTestnet` | **A different chain** (Vulcan Forged, ids 1338/1339). The code defines Kinetiq's chain itself | Confirmed pitfall |
-| Markets.xyz | The site was unreachable from the build sandbox (blocked by the proxy). Only a mention of an Android app was found | **Unverified. Check yourself** whether it lists perps or long/short on new Elysium tokens, indexes, or launchpad pairs. If it does, SLOPX overlaps with it |
-| Twoprint, $COVERT, $DUST | Nothing specific found | **Unverified** |
-| Similar products | Derp.trade (Solana) offers leverage on pump.fun coins. No index/short product on Elysium or HyperEVM found | Absence **not confirmed** |
-| Launchpads | Pump.fun, Ascend (KNTQ) and Montra are reported as day-one issuers. Nothing found on Obol, ElysPump, Volta or Kleos | Partially |
-| **Creator fees by launchpad** | **No launchpad's creator-fee percentage could be verified.** Pump.fun's Solana "Project Ascend" fee tiers are a *different* thing from the Elysium launchpad Ascend; don't confuse them | **Unverified** |
-| GeckoTerminal / DexScreener Elysium slug | Not found yet | **Unverified.** Set `GECKO_NETWORK` once listed |
-| `$SLOPX` ticker | No token named SLOPX found on any chain (SLOP, SLOPY and SLPx are different). There is no indexed Elysium token list yet | **Can't confirm it's free on Elysium.** Re-check on the explorer/launchpads before launch |
-| Your playbook (`Obsidian Vault/playbook/tech-narrative patterns.md`) | This build ran in a cloud container with no access to your Windows filesystem, so **I could not read it** | Not read |
-
-## 2. What was built
-
-- **`SlopxPools.sol`**: hourly rounds, per-market long/short deposits in native HYPE, skew funding, capped pari-mutuel payouts, per-wallet and per-side caps, keeper proposal plus guardian dispute window, permissionless settle, refunds for one-sided rounds, ties, missing results and guardian voids, pause (deposits and proposals only), unpausable claims, per-round parameter snapshot, bounded admin, two-step ownership, reentrancy guard.
-- **Keeper (TypeScript + viem + SQLite)**: restart-safe loop with GeckoTerminal discovery and price sampling, an optional onchain factory-event adapter for launchpad tagging, per-round constituent snapshot, weighted-median index, canonical JSON plus keccak hash, propose and settle, and an event indexer.
-- **API server**: serves the site plus JSON (live index, results, proofs, events, user history), a read-only RPC proxy, and a geo check.
-- **Website**: markets, live index and constituents (included and excluded), deposit flow with payout preview and a risk acknowledgement, positions and claims, round history, a settlement proof page that **recomputes the result in the browser** and compares hashes, and docs, trust model, threat model and terms. **Every number comes from the contract or from keeper data. There is no mock data.** Empty states say so plainly.
-
-## 3. Test results
-
-| Suite | Result |
+| Area | First-pass reality |
 |---|---|
-| Foundry: 18 unit + 4 fuzz (2,000 runs each) | **22/22 pass** |
-| Fuzz: conservation (`lp + sp + fee == L + S`), contract equals reference, funding favours minority, end-to-end solvency with 2–30 wallets | pass |
-| Unit: one-sided refund, missing price refund, tie, dispute and re-propose, reject after window blocked, pause blocks deposits and not claims, paused settlement falls back to refund, deposit window, caps, double claim, **reentrancy**, param snapshot, admin bounds | pass |
-| TypeScript: index math (median, capped weights, whale resistance, filters, refund rule, hash determinism), payout conservation, Solidity parity | **8/8 pass** |
-| Local end-to-end (Anvil, chain 99801, 5-min rounds) | **Pass:** deploy, 6 deposits across 2 markets, funding 0.175 HYPE as designed, keeper snapshot, propose, settle after the dispute window, claims match hand calculation (3.837 / 0.6395 / 4.4335 HYPE, fee 0.09), keeper restart mid-round, recompute CLI hash = onchain hash |
+| Contract | **Real and working.** 22 tests passed. Caps were high (10 HYPE per wallet, 500 per side) |
+| Index data | **Stubbed.** The GeckoTerminal adapter had no network slug set, and the launchpad factory list was empty. The "real" index therefore had **no data source**. The only index results ever computed came from a **synthetic seeder** (fake `TEST0…TEST13` tokens) in a throwaway local database |
+| Launchpad attribution | **Not real.** It was a config of names with no addresses |
+| "Unsellable" detection | **Planned only.** It relied on a sellers count from an API that was never connected, and no detector existed |
+| Keeper E2E | **Real, but only on a blank local Anvil chain** with the synthetic prices above. It found and fixed 2 bugs |
+| Alerts | **None** |
+| Keeper double-run protection | **None** (single process assumed) |
+| Funding | Implemented. The simulation only covered moderately one-sided markets |
+| UI | Worked, but used a neon-green casino style, had dark mode only, and its first screen was too busy |
+| Testnet / mainnet | **Never deployed.** I couldn't reach any Elysium host from the sandbox |
+| Markets.xyz check | **Not done** (blocked) |
 
-## 4. Funding design: decision needed
+## 1. What changed in this pass
 
-Full details are in [funding.md](funding.md) and [funding-simulation.md](funding-simulation.md). **Headline: funding barely moves skew, because the pari-mutuel odds already do the balancing. Funding mostly moves value from biased short traders to whoever takes the other side.** I implemented a modest default (k = 10%, max 5%, minority cap 50%). The owner can adjust it within bounds, and you can set it to zero. **Please review the simulation tables and confirm or change these parameters before mainnet.**
+### Positioning
+I reached Markets.xyz after this session's network access was widened. Markets.xyz is **"Markets.xyz by Kinetiq"**: 24/7 perps on stocks, indices, commodities and crypto, settled on Hyperliquid. It does **not** offer a new-launch basket, a launchpad pair or memecoin shorts.
 
-## 5. Testnet status
+SLOPX is therefore positioned as **the way to short the whole Elysium trench at once**: the TRENCH24 index plus launchpad-vs-launchpad pairs. Single-coin shorts are deliberately not offered. The site headline is "Bet against every coin launched on Elysium in the last 24 hours."
 
-Elysium testnet deployment **was not done.** The keeper and deployer keys are yours to supply, and the testnet RPC host could not be reached from the build sandbox. Instead, the full loop was run on a local Anvil chain using chain id 99801: deploy, deposit (both markets), funding check, keeper snapshot, propose, dispute window, settle, claim. That run used synthetic test prices in a throwaway database, which was never committed or shown on any real site.
+### Verified facts (checked onchain this pass)
+- `eth_chainId`: `rpc.elysium.kinetiq.xyz` returns **99901**, and `testnet-rpc.elysium.kinetiq.xyz` returns **99801**.
+- **Uniswap v4 PoolManager `0xe2e105d3f7209a9da11f83ccf3e7398a753823f1`:**
+  - mainnet has 48 KB of code there, and `owner()` returns `0xA9aE…Da8D`;
+  - **testnet has no code there**, which confirms what you saw;
+  - I could **not** find it in Uniswap's official deployment docs: they render client-side, and a GitHub code search for the address returned nothing. The address is therefore verified **by RPC only**.
+- **WHYPE** `0xba876237…5e81`: `symbol()` returns "WHYPE".
+- **Multicall3** is deployed at the canonical address.
+- **Block time** is ≈ 0.105 s, about 820k blocks per day.
 
-The run found and fixed two bugs:
-- a SQL quoting error in constituent selection;
-- the keeper using wall-clock time instead of chain time, which made it propose too early on a node whose clock lagged.
+### Real index, fully onchain (no APIs)
+- **Launches:** every PoolManager `Initialize` event, HYPE/WHYPE-quoted. **20,672 pools were seen in 26 h.**
+- **Launchpad:** the pool's v4 hook address. A hook counts as a launchpad if it created ≥ 25 pools in the window. On 9 Nov, hook `0x6b12…` alone created 17,321 pools. **No hook could be matched to a launchpad name (Montra, Ascend, …), because no official source publishes those addresses.** Names stay unverified until you confirm them, and pair markets refund until then.
+- **Price:** `slot0.sqrtPriceX96` read with `extsload` at a pinned block. This was checked against GeckoTerminal's price for the same pool.
+- **Depth:** the in-range virtual HYPE reserve × 2. **Launch seed liquidity ≈ 84 HYPE**, so the floor is set at **150 HYPE**. Only 92 of 20,672 pools cleared it.
+- **Sellability:** at least 5 distinct `tx.from` sellers, taken from `Swap` events. **45 tokens** passed both the depth and the seller filters.
+- **Proof:** every round publishes every candidate with its exclusion reason, the hook counts, the block window, and each sample's block and `sqrtPriceX96`. `recompute --verify-chain` re-reads every sample from an archive node.
+- **Method change, forced by real data:** in the first real fork round, 11 of 25 constituents didn't trade, so the plain weighted median was exactly 1.000 and the round refunded as a tie. The index now uses the **weighted interquartile mean** (`slopx-index-v2.1`). It still needs more than 25% of weight to move, but it doesn't stick at 1.0.
 
-## 6. Regulatory flag ⚠️
+### Balance / funding
+- **Simulated** with heavily one-sided markets (95% and 99% short bias), under the new launch caps.
+- **Finding:** funding does **not** reduce skew in any scenario. Refunds come from too few participants, not from funding: with a 99% short bias, 18.7% of rounds refund at 30 wallets and 78% at 6 wallets. What funding does change is how much the biased majority pays.
+- **Chosen parameters:** k = 5% × skew, max 2.5% of the crowded side's stake, minority cap 50%. That is half the earlier default.
 
-**This product is functionally a fixed-odds or pari-mutuel bet on a price outcome.** Many regulators would classify it as **gambling, binary options or a derivative/swap**:
+### Safety changes
+- **Launch caps lowered to 1 HYPE per wallet and 25 HYPE per side per round, with hard ceilings of 10 / 500** that even the owner cannot exceed.
+- **Stateful invariant fuzzing** added: 25,600 random calls covering deposits, proposals, rejections, settles, voids, pauses, claims and fee withdrawals. The pool stays solvent throughout.
+- **Keeper:**
+  - a SQLite lease stops two keepers acting at once;
+  - actions are driven by chain state, so a restart cannot double-settle;
+  - alerts (log, `/api/health`, optional webhook) fire for missing prices, thin legs, a stale sampler and rounds still unsettled near the refund deadline.
+- **Rules & Risk page:**
+  - plain-language rules;
+  - total-loss risk and unaudited status;
+  - "betting-like, possibly regulated, not investing";
+  - the **live region-block config**.
 
-- **US:** CFTC (event contracts, swaps) plus state gambling law. Treat it as prohibited without a licence.
-- **UK:** the FCA bans retail binary options, and the Gambling Commission also has jurisdiction.
-- **EU:** ESMA restricts binary options, and member-state gambling laws apply.
-- **Also restrictive:** Singapore, Australia, France and Ontario, among others.
-- **Sanctioned jurisdictions:** must be blocked outright.
+### UI
+Near-monochrome, with one indigo accent and no neon. Light and dark modes (system preference plus a toggle). Inter and JetBrains Mono, with subtle motion. The first screen is one sentence, the live TRENCH24 value and one Long / Short action. It shows real numbers only, with explicit empty states.
 
-The default `BLOCKED_REGIONS` is `US,GB,FR,SG,AU,KP,IR,SY,CU,RU,BY`. It is **a starting point, not legal advice.** Geo-blocking only works behind a proxy that sets a country header (e.g. Cloudflare), and the contract itself cannot geo-block. **Get advice from a lawyer in your jurisdiction before offering this anywhere.** The terms page is a draft.
+## 2. Status
 
-## 7. Coin fee-flow recommendation
+### Proven working (run against real Elysium mainnet data)
+- Launch discovery, pricing, depth and seller indexing on live mainnet, plus constituent snapshots of **25 real tokens** and per-round result computation.
+- `recompute` reproduces the published result and hash.
 
-- **Creator fees:** I could not verify which Elysium launchpad pays creator fees, or at what percentage. Before launch, open each candidate launchpad's token factory contract on the explorer and confirm (a) that a creator-fee recipient exists in code, (b) its basis points, and (c) whether fees continue after graduation to the DEX. Launch on the one where this is enforced onchain, not one that only promises it in docs.
-- **Protocol fees (2% of winnings):** send them to a treasury multisig. A suggested split is **40% buyback-and-burn $SLOPX, 30% insurance fund** (covers keeper gas and backstops bugs), **30% operations**. Keep the coin and the pools separate: **don't** use $SLOPX as collateral in v1.
-- Present the token as a community/meme token, not as a claim on revenue. A revenue share can turn it into a security.
+### Tested locally only (fork of Elysium mainnet, contract on the fork)
+- deposits from 6 wallets under the caps;
+- the cap revert;
+- funding, which matched the formula: 0.095 HYPE moved from shorts to longs;
+- a deposit reverting while paused;
+- guardian rejection inside the dispute window;
+- a **keeper killed mid-dispute and restarted**, which re-proposed the identical hash;
+- settlement and claims;
+- the missing-price refund after 660 s;
+- a second settle reverting;
+- fee accounting (see the run-2 numbers below).
 
-## 8. Open risks
+The contract tests (24 unit/fuzz + 2 invariants) and the TypeScript tests (12) all pass.
 
-1. No audit. **Highest priority before mainnet.**
-2. Keeper is a single trusted operator, and a compromised keeper plus guardian can misreport one round (bounded by caps).
-3. There is one price source (GeckoTerminal), and its Elysium slug is unconfirmed. Without it, the index has no data.
-4. Few launches early on means small constituent sets, which makes manipulation cheaper and refunds more frequent.
-5. Launchpad attribution for the pair markets needs verified factory addresses in `keeper/launchpads.json`.
-6. Geo-blocking needs a CDN in front of Replit.
-7. The mainnet chain ID is unverified.
+### Not done
+- No testnet or mainnet deployment.
+- The UI was not tested with a real browser wallet. It was rendered with Playwright against the fork; it has no injected wallet.
 
-## Mainnet steps (you do these)
+### Still blocks a safe launch
+1. **No audit** of `SlopxPools.sol`.
+2. **Launchpad names are unverified.** No hook can be labelled Montra, Ascend and so on until official addresses exist, so pair markets refund until then.
+3. **Sampling trust:** the keeper chooses when to sample. The samples are verifiable but selectable. Run an independent watcher that re-checks every proposal during the 10-minute window.
+4. **Short test rounds:** the fork rounds were 5 minutes with 60 s windows. Production is 1 h with 5-minute windows and has not been observed live yet.
+5. **The guardian must be a multisig**, separate from the keeper key.
+6. **Regulation:** this is betting-like. The default blocklist (`US, GB, FR, SG, AU, CA-ON` plus sanctioned countries) is a starting point, not legal advice, and it works only behind a CDN that sets a country header. **Get legal advice for every region you intend to serve.**
+7. **The Uniswap v4 address** is verified by RPC, not yet by an official Uniswap page.
+8. **Ascend** reportedly quotes pools in USDC or RWAs, which index v2.1 excludes (HYPE/WHYPE only).
 
-1. Confirm the mainnet chain ID, RPC and explorer from Kinetiq's official docs. Set `CHAIN_ID`, `RPC_URL` and `EXPLORER_URL`.
-2. Get an audit. Lower the caps for launch: `setLimits(0.01e18, 1e18, 50e18)`.
-3. Create the guardian multisig and the treasury multisig, plus a dedicated burner keeper key funded with ~1 HYPE for gas.
-4. Put the keys in `.env` (local) or Replit Secrets. Never paste them anywhere else.
-5. `cd contracts && forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast --verify` (add verifier flags for the Elysium explorer).
-6. `transferOwnership(<multisig>)`, then `acceptOwnership()` from the multisig.
-7. Set `CONTRACT_ADDRESS` and `START_BLOCK`, plus `GECKO_NETWORK` once it is listed, and fill `keeper/launchpads.json` with verified factories.
-8. Deploy on Replit as a Reserved VM with `KEEPER_ENABLED=true`. Put Cloudflare in front for region blocking.
-9. Watch the first 24 rounds with real but tiny deposits before announcing.
-10. Launch the coin separately, after checking the ticker and the creator-fee terms.
+## 3. Exact deployment steps (you do these)
+
+**Testnet (settles on 99801, reads data from mainnet)**
+1. Create burner keys: a deployer, a keeper (fund it with a little testnet HYPE) and a guardian (ideally a multisig). Put them in `.env`, which is gitignored, or in Replit Secrets.
+2. Set `CHAIN_ID=99801`, `RPC_URL=https://testnet-rpc.elysium.kinetiq.xyz` and `DATA_RPC_URL=https://rpc.elysium.kinetiq.xyz`.
+3. Deploy:
+   ```bash
+   cd contracts && forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast
+   ```
+4. Set `CONTRACT_ADDRESS` and `START_BLOCK` (the deploy block), then run `npm start` with `KEEPER_ENABLED=true`.
+5. Run at least 48 hourly rounds. Check every `/api/result/*/*/raw` with `recompute --verify-chain`.
+
+**Mainnet (after the audit)**
+1. Set `CHAIN_ID=99901`, `RPC_URL=https://rpc.elysium.kinetiq.xyz`, and the explorer URL.
+2. Deploy with the same script. **Keep the launch caps.** `transferOwnership(multisig)` and `acceptOwnership()`; `setGuardian(multisig)`; `setTreasury(multisig)`.
+3. Verify the source on the explorer, and publish the address in the README.
+4. Replit: use a Reserved VM, put Cloudflare in front, set `BLOCKED_REGIONS` and `ALERT_WEBHOOK_URL`.
+5. Add **verified** launchpad hooks to `keeper/launchpads.json`, citing the official source for each.
+6. Launch the $SLOPX coin separately, after re-checking the ticker and creator-fee terms on the launchpad you choose. The creator fee is still **unverified** for every launchpad.

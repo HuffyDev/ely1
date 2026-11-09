@@ -3,10 +3,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, extname, normalize } from 'node:path';
-import { cfg, chain, MARKETS } from './config.js';
-import { db } from './db.js';
+import { cfg, chain, dataChain, MARKETS, LAUNCHPADS, labelForHook } from './config.js';
+import { db, kvGet } from './db.js';
+import { recentAlerts } from './alerts.js';
 import { getSnapshot } from './rounds.js';
-import { median, weightedMedian, cappedWeights, METHOD_VERSION, canonicalJson } from './indexMath.js';
+import { median, weightedIQM, cappedWeights, METHOD_VERSION, canonicalJson, priceHype } from './indexMath.js';
 import { DEFAULT_PARAMS } from './payout.js';
 
 const WEB = new URL('../../web/dist/', import.meta.url).pathname;
@@ -26,35 +27,44 @@ const json = (res: ServerResponse, code: number, body: unknown) => {
 const now = () => Math.floor(Date.now() / 1000);
 
 function liveLeg(leg: any, start: number) {
-  // live return of each frozen constituent vs its start price, from real samples only
+  // live return of each frozen constituent vs its start price, from real onchain samples only
+  const last = db.prepare('SELECT block, ts, sqrt_price_x96, depth_hype FROM samples WHERE pool_id=? ORDER BY block DESC LIMIT 1');
+  const startS = db.prepare('SELECT sqrt_price_x96 FROM samples WHERE pool_id=? AND ts > ? AND ts <= ?');
   const rows = leg.constituents.filter((c: any) => c.included).map((c: any) => {
-    const startS = (db.prepare('SELECT price_usd FROM samples WHERE token=? AND ts > ? AND ts <= ?').all(c.token, start - cfg.index.sampleWindowSec, start) as any[]).map((r) => r.price_usd);
-    const last = db.prepare('SELECT price_usd, ts FROM samples WHERE token=? ORDER BY ts DESC LIMIT 1').get(c.token) as any;
-    const sp = median(startS);
-    return { ...c, startPrice: sp ?? null, lastPrice: last?.price_usd ?? null, lastTs: last?.ts ?? null, ret: sp && last ? last.price_usd / sp : null };
+    const sp = median((startS.all(c.pool, start - cfg.index.sampleWindowSec, start) as any[]).map((r) => priceHype(r.sqrt_price_x96, c.tokenIsC0, c.decimals)));
+    const l = last.get(c.pool) as any;
+    const lp = l ? priceHype(l.sqrt_price_x96, c.tokenIsC0, c.decimals) : null;
+    return { ...c, startPrice: sp ?? null, lastPrice: lp, lastBlock: l?.block ?? null, lastTs: l?.ts ?? null, liveDepth: l?.depth_hype ?? null, ret: sp && lp ? lp / sp : null };
   });
   const priced = rows.filter((r: any) => r.ret !== null);
-  const w = cappedWeights(priced.map((r: any) => r.liquidityUsd), cfg.index.maxWeight);
+  const w = cappedWeights(priced.map((r: any) => r.liquidityHype), cfg.index.maxWeight);
   priced.forEach((r: any, i: number) => (r.liveWeight = w[i]));
-  const ratio = priced.length >= cfg.index.minConstituents ? weightedMedian(priced.map((r: any) => r.ret), w) : undefined;
-  return { name: leg.name, launchpads: leg.launchpads, ratio: ratio ?? null, priced: priced.length, constituents: rows,
+  const ratio = priced.length >= cfg.index.minConstituents ? weightedIQM(priced.map((r: any) => r.ret), w) : undefined;
+  return { name: leg.name, launchpads: leg.launchpads, ratio: ratio ?? null, priced: priced.length, eligible: rows.length, constituents: rows,
     excluded: leg.constituents.filter((c: any) => !c.included) };
 }
 
 async function api(req: IncomingMessage, res: ServerResponse, path: string, q: URLSearchParams) {
-  if (path === '/api/health') return json(res, 200, { ok: true, time: now() });
+  if (path === '/api/health') {
+    const lastSample = Number(kvGet('v4:lastSampleTs') ?? 0) || null;
+    return json(res, 200, { ok: true, time: now(), lastSample, sampleAgeSec: lastSample ? now() - lastSample : null, poolManagerOk: kvGet('v4:ok') === '1', alerts: recentAlerts(20) });
+  }
   if (path === '/api/geo') {
     const c = country(req);
-    return json(res, 200, { country: c ?? null, blocked: !!c && cfg.blockedRegions.includes(c), detection: c ? 'header' : 'unavailable' });
+    return json(res, 200, { country: c ?? null, blocked: !!c && cfg.blockedRegions.includes(c), detection: c ? 'header' : 'unavailable', blockedRegions: cfg.blockedRegions });
   }
   if (path === '/api/config') {
-    const lastSample = (db.prepare('SELECT MAX(ts) t FROM samples').get() as any)?.t ?? null;
-    const tracked = (db.prepare('SELECT COUNT(*) n FROM tokens WHERE launched_at > ?').get(now() - 86_400) as any).n;
+    const lastSample = Number(kvGet('v4:lastSampleTs') ?? 0) || null;
+    const head = Number(kvGet('v4:initBlock') ?? 0);
+    const minBlock = head - Math.ceil(86_400 / cfg.blockTimeSec);
+    const launches24h = (db.prepare('SELECT COUNT(*) n FROM pools WHERE launch_block > ?').get(minBlock) as any).n;
     return json(res, 200, {
       chain: { id: chain.id, name: chain.name, rpc: chain.rpcUrls.default.http[0], explorer: chain.blockExplorers?.default.url },
+      dataChain: { id: dataChain.id, poolManager: cfg.poolManager, whype: cfg.whype },
       contract: cfg.contract ?? null, markets: MARKETS, index: { method: METHOD_VERSION, ...cfg.index },
+      labels: LAUNCHPADS.map((l) => ({ name: l.name, hooks: l.hooks, source: l.source ?? null })),
       defaultParams: Object.fromEntries(Object.entries(DEFAULT_PARAMS).map(([k, v]) => [k, Number(v)])),
-      data: { geckoNetwork: cfg.geckoNetwork ?? null, lastSample, trackedTokens24h: tracked, keeperEnabled: cfg.keeperEnabled },
+      data: { lastSample, launches24h, keeperEnabled: cfg.keeperEnabled, poolManagerOk: kvGet('v4:ok') === '1' },
     });
   }
   let m;
@@ -65,14 +75,16 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string, q: U
     const roundId = Math.floor((now() - g) / d);
     const start = g + roundId * d;
     const snap = roundId >= 0 ? getSnapshot(marketId, roundId) : null;
-    if (!snap) return json(res, 200, { marketId, roundId, start, snapshot: false, legs: [] });
-    const legs = snap.map((l: any) => liveLeg(l, start));
+    if (!snap) return json(res, 200, { marketId, roundId, start, end: start + d, snapshot: false, legs: [] });
+    const legs = snap.legs.map((l: any) => liveLeg(l, start));
     const ratio = legs.length === 1 ? legs[0].ratio : legs[0].ratio && legs[1].ratio ? legs[0].ratio / legs[1].ratio : null;
-    return json(res, 200, { marketId, roundId, start, end: start + d, snapshot: true, liveRatio: ratio, legs });
+    return json(res, 200, { marketId, roundId, start, end: start + d, snapshot: true, window: snap.window, hookCounts: snap.hookCounts, liveRatio: ratio, legs });
   }
-  if ((m = path.match(/^\/api\/universe$/))) {
-    const rows = db.prepare('SELECT token,pool,symbol,launchpad,launched_at,liquidity_usd,sellers_24h,unsellable FROM tokens WHERE launched_at > ? ORDER BY launched_at DESC LIMIT 500').all(now() - 86_400);
-    return json(res, 200, rows);
+  if (path === '/api/launchpads') {
+    const head = Number(kvGet('v4:initBlock') ?? 0);
+    const rows = db.prepare('SELECT hooks, COUNT(*) n, SUM(depth_hype >= ?) liquid FROM pools WHERE launch_block > ? GROUP BY hooks ORDER BY n DESC LIMIT 40')
+      .all(cfg.index.minLiquidityHype, head - Math.ceil(86_400 / cfg.blockTimeSec)) as any[];
+    return json(res, 200, rows.map((r) => ({ ...r, label: labelForHook(r.hooks) ?? null })));
   }
   if ((m = path.match(/^\/api\/results\/(\d+)$/))) {
     const rows = db.prepare('SELECT round_id, data_hash, result_e18, proposed_tx, settled_tx, created_at, json FROM results WHERE market_id=? ORDER BY round_id DESC LIMIT 200').all(Number(m[1])) as any[];
@@ -81,19 +93,17 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string, q: U
   if ((m = path.match(/^\/api\/result\/(\d+)\/(\d+)(\/raw)?$/))) {
     const row = db.prepare('SELECT json, data_hash FROM results WHERE market_id=? AND round_id=?').get(Number(m[1]), Number(m[2])) as any;
     if (!row) return json(res, 404, { error: 'not computed yet' });
-    if (m[3]) { // exact canonical bytes that hash to data_hash
+    if (m[3]) {
       res.writeHead(200, { 'content-type': 'application/json', 'content-disposition': `attachment; filename="slopx-${m[1]}-${m[2]}.json"`, 'access-control-allow-origin': '*' });
       return res.end(canonicalJson(JSON.parse(row.json)));
     }
     return json(res, 200, { dataHash: row.data_hash, computation: JSON.parse(row.json) });
   }
   if ((m = path.match(/^\/api\/events\/(\d+)$/))) {
-    const rows = db.prepare('SELECT * FROM events WHERE market_id=? ORDER BY block DESC, log_index DESC LIMIT 300').all(Number(m[1]));
-    return json(res, 200, rows);
+    return json(res, 200, db.prepare('SELECT * FROM events WHERE market_id=? ORDER BY block DESC, log_index DESC LIMIT 300').all(Number(m[1])));
   }
   if ((m = path.match(/^\/api\/user\/(0x[0-9a-fA-F]{40})$/))) {
-    const rows = db.prepare("SELECT * FROM events WHERE user=? ORDER BY block DESC LIMIT 300").all(m[1].toLowerCase());
-    return json(res, 200, rows);
+    return json(res, 200, db.prepare('SELECT * FROM events WHERE user=? ORDER BY block DESC LIMIT 300').all(m[1].toLowerCase()));
   }
   return json(res, 404, { error: 'not found' });
 }

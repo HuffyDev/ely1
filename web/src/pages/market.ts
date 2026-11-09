@@ -1,5 +1,5 @@
 import { parseEther, formatEther } from 'viem';
-import { state, api, esc, fmtHype, fmtPct, fmtUsd, fmtPrice, dur, nowSec, openRound, currentRound, roundStart, readRound, marketBlurb, connect, ensureChain, contractRef, toast, modal, LS, explorerTx, short, explorerAddr, STATUS, onChange } from '../lib';
+import { state, api, esc, fmtHype, fmtPct, fmtH, padName, ELYSIUM_EXPLORER, fmtPrice, dur, nowSec, openRound, currentRound, roundStart, readRound, marketBlurb, connect, ensureChain, contractRef, toast, modal, LS, explorerTx, short, explorerAddr, STATUS, onChange } from '../lib';
 import { winMultiple, loseMultiple, applyFunding, DEFAULT_PARAMS } from '../../../keeper/src/payout';
 import { skewBar, notDeployed, toParams } from './markets';
 
@@ -7,11 +7,12 @@ export async function renderMarket(root: HTMLElement, id: number) {
   const cfg = state.cfg!;
   const m = cfg.markets.find((x) => x.id === id);
   if (!m) { root.innerHTML = '<div class="empty"><h4>Unknown market</h4></div>'; return; }
-  let side: 'long' | 'short' = 'short';
+  const qs = new URLSearchParams(location.hash.split('?')[1] ?? '');
+  let side: 'long' | 'short' = qs.get('side') === 'long' ? 'long' : 'short';
 
   root.innerHTML = `
-  <div class="section row between wrap" style="margin-top:28px">
-    <div><div class="row"><h1 style="font-size:30px;font-family:var(--mono)">${esc(m.name)}</h1>${m.legs.length > 1 ? '<span class="tag">Pair</span>' : '<span class="tag tag-accent">Index</span>'}</div>
+  <div class="section row between wrap fade-in" style="margin-top:36px">
+    <div><div class="row"><h1 style="font-size:28px;font-family:var(--mono);letter-spacing:-0.02em">${esc(m.name)}</h1>${m.legs.length > 1 ? '<span class="tag">Pair</span>' : '<span class="tag tag-accent">Index</span>'}</div>
     <p class="muted" style="margin-top:6px;max-width:640px">${esc(marketBlurb(m))}</p></div>
     <div class="row gap-lg">
       <div><div class="small muted">Live round</div><div class="mono" id="cur-round">—</div></div>
@@ -22,15 +23,15 @@ export async function renderMarket(root: HTMLElement, id: number) {
   <div class="grid-main">
     <div>
       <div class="card">
-        <div class="card-head"><h3>Live index · current round</h3><span class="small muted" id="live-meta"></span></div>
+        <div class="card-head"><h3>Live index · round in progress</h3><span class="small muted" id="live-meta"></span></div>
         <div class="card-pad" id="live-body"><div class="skeleton"></div></div>
       </div>
       <div class="card mt-lg">
-        <div class="card-head"><h3>Constituents</h3><span class="small muted">Frozen at round start · weights capped at ${(cfg.index.maxWeight * 100).toFixed(0)}%</span></div>
+        <div class="card-head"><h3>Constituents</h3><span class="small muted">Frozen at round start · liquidity-weighted, capped at ${(cfg.index.maxWeight * 100).toFixed(0)}% · prices from Uniswap v4 slot0</span></div>
         <div class="table-wrap" id="cons"></div>
       </div>
       <div class="card mt-lg">
-        <div class="card-head"><h3>Excluded this round</h3><span class="small muted">Liquidity &lt; ${fmtUsd(cfg.index.minLiquidityUsd)}, &lt; ${cfg.index.minSellers24h} sellers/24h, unsellable, or missing price</span></div>
+        <div class="card-head"><h3>Excluded this round</h3><span class="small muted">Depth &lt; ${fmtH(cfg.index.minLiquidityHype)}, &lt; ${cfg.index.minSellers24h} distinct sellers in 24h, not a launchpad pool, or missing price</span></div>
         <div class="table-wrap" id="excl"></div>
       </div>
       <div class="card mt-lg">
@@ -58,31 +59,32 @@ export async function renderMarket(root: HTMLElement, id: number) {
   // ---------------- live index
   async function loadLive() {
     const body = root.querySelector('#live-body')!;
-    if (!t) { body.innerHTML = `<div class="empty"><h4>No round schedule</h4>The contract isn't configured, so there is no round clock to anchor the index to.</div>`; root.querySelector('#cons')!.innerHTML = ''; root.querySelector('#excl')!.innerHTML = ''; return; }
+    if (!t) { body.innerHTML = `<div class="empty"><h4>No round schedule</h4>Rounds start when the pool contract is deployed. Until then there is no round to snapshot.</div>`; root.querySelector('#cons')!.innerHTML = ''; root.querySelector('#excl')!.innerHTML = ''; return; }
     const live = await api(`/api/live/${m!.id}?genesis=${t.genesis}&duration=${t.duration}`).catch(() => null);
     if (!live || !live.snapshot) {
-      body.innerHTML = `<div class="empty"><h4>No snapshot for this round yet</h4>The keeper freezes the constituent list when a round starts. ${cfg.data.geckoNetwork ? '' : 'No price source is configured yet (<code>GECKO_NETWORK</code>), so nothing is tracked.'}</div>`;
+      body.innerHTML = `<div class="empty"><h4>No snapshot for this round yet</h4>The keeper freezes the constituent list when a round starts. ${cfg.data.poolManagerOk ? '' : 'The keeper has not reached the Elysium PoolManager yet.'}</div>`;
       root.querySelector('#cons')!.innerHTML = '<div class="empty">—</div>'; root.querySelector('#excl')!.innerHTML = '<div class="empty">—</div>';
       return;
     }
     const r = live.liveRatio as number | null;
     body.innerHTML = `<div class="row between wrap">
       <div><div class="small muted">${m!.legs.length > 1 ? `${esc(m!.legs[0].name)} ÷ ${esc(m!.legs[1].name)} (weighted-median return)` : 'Weighted-median return since round start'}</div>
-      <div class="big-num ${r == null ? '' : r > 1 ? 'up' : 'down'}">${r == null ? 'insufficient data' : fmtPct(r - 1)}</div>
-      <div class="small muted">${r == null ? `Needs ≥ ${cfg.index.minConstituents} priced constituents per leg. A round without them resolves at 1.0 and everyone is refunded.` : r > 1 ? 'LONG is winning right now' : 'SHORT is winning right now'}</div></div>
+      <div class="big-num ${r == null || r === 1 ? '' : r > 1 ? 'up' : 'down'}">${r == null ? 'insufficient data' : fmtPct(r - 1)}</div>
+      <div class="small muted">${r == null ? `Needs ≥ ${cfg.index.minConstituents} priced constituents per leg. A round without them resolves at 1.0 and everyone is refunded.` : r > 1 ? 'Long is ahead right now' : r < 1 ? 'Short is ahead right now' : 'Flat so far: an exactly flat round refunds'}</div></div>
       <div class="row gap-lg">${live.legs.map((l: any) => `<div><div class="small muted">${esc(l.name)}</div><div class="mono">${l.ratio ? fmtPct(l.ratio - 1) : '—'}</div><div class="small faint">${l.priced} priced</div></div>`).join('')}</div>
     </div>`;
     root.querySelector('#live-meta')!.textContent = `round #${live.roundId} · ${live.legs.reduce((a: number, l: any) => a + l.constituents.length, 0)} constituents`;
     const rows = live.legs.flatMap((l: any) => l.constituents.map((c: any) => ({ ...c, leg: l.name })))
       .sort((a: any, b: any) => (b.liveWeight ?? 0) - (a.liveWeight ?? 0));
-    root.querySelector('#cons')!.innerHTML = rows.length ? `<table><thead><tr><th>Token</th>${m!.legs.length > 1 ? '<th>Leg</th>' : ''}<th>Launchpad</th><th class="num">Liquidity</th><th class="num">Weight</th><th class="num">Start</th><th class="num">Last</th><th class="num">Return</th></tr></thead><tbody>
-      ${rows.map((c: any) => `<tr><td><a href="${explorerAddr(c.token)}" target="_blank" rel="noopener"><strong>${esc(c.symbol)}</strong> <span class="faint mono small">${short(c.token)}</span></a></td>${m!.legs.length > 1 ? `<td>${esc(c.leg)}</td>` : ''}
-      <td><span class="tag">${esc(c.launchpad)}</span></td><td class="num">${fmtUsd(c.liquidityUsd)}</td><td class="num">${c.liveWeight != null ? (c.liveWeight * 100).toFixed(1) + '%' : '—'}</td>
+    root.querySelector('#cons')!.innerHTML = rows.length ? `<table><thead><tr><th>Token</th>${m!.legs.length > 1 ? '<th>Leg</th>' : ''}<th>Launchpad</th><th>Price source</th><th class="num">Depth</th><th class="num">Weight</th><th class="num">Start (HYPE)</th><th class="num">Last (HYPE)</th><th class="num">Return</th></tr></thead><tbody>
+      ${rows.map((c: any) => `<tr><td><a href="${ELYSIUM_EXPLORER}/token/${c.token}" target="_blank" rel="noopener"><strong>${esc(c.symbol)}</strong> <span class="faint mono small">${short(c.token)}</span></a></td>${m!.legs.length > 1 ? `<td>${esc(c.leg)}</td>` : ''}
+      <td><span class="tag">${esc(padName(c.launchpad))}</span></td><td class="small muted mono" title="Uniswap v4 pool ${esc(c.pool)} · slot0 read at block ${c.lastBlock ?? '—'}">slot0 @${c.lastBlock ?? '—'}</td><td class="num">${fmtH(c.liveDepth ?? c.liquidityHype)}</td><td class="num">${c.liveWeight != null ? (c.liveWeight * 100).toFixed(1) + '%' : '—'}</td>
       <td class="num">${fmtPrice(c.startPrice)}</td><td class="num">${fmtPrice(c.lastPrice)}</td><td class="num ${c.ret > 1 ? 'up' : c.ret < 1 ? 'down' : ''}">${c.ret ? fmtPct(c.ret - 1) : '—'}</td></tr>`).join('')}</tbody></table>`
       : '<div class="empty"><h4>No eligible constituents</h4>No token launched in the last 24h passes the filters.</div>';
     const ex = live.legs.flatMap((l: any) => l.excluded);
-    root.querySelector('#excl')!.innerHTML = ex.length ? `<table><thead><tr><th>Token</th><th>Launchpad</th><th class="num">Liquidity</th><th class="num">Sellers 24h</th><th>Reason</th></tr></thead><tbody>
-      ${ex.slice(0, 100).map((c: any) => `<tr><td>${esc(c.symbol)} <span class="faint mono small">${short(c.token)}</span></td><td>${esc(c.launchpad)}</td><td class="num">${fmtUsd(c.liquidityUsd)}</td><td class="num">${c.sellers24h}</td><td><span class="tag tag-warn">${esc(c.excludeReason)}</span></td></tr>`).join('')}</tbody></table>`
+    root.querySelector('#excl')!.innerHTML = ex.length ? `<table><thead><tr><th>Token</th><th>Launchpad</th><th class="num">Depth</th><th class="num">Sellers 24h</th><th>Reason</th></tr></thead><tbody>
+      ${ex.sort((a: any, b: any) => b.liquidityHype - a.liquidityHype).slice(0, 60).map((c: any) => `<tr><td>${esc(c.symbol)} <span class="faint mono small">${short(c.token)}</span></td><td>${esc(padName(c.launchpad))}</td><td class="num">${fmtH(c.liquidityHype)}</td><td class="num">${c.sellers24h}</td><td><span class="tag tag-warn">${esc(c.excludeReason)}</span></td></tr>`).join('')}</tbody></table>`
+      + (ex.length > 60 ? `<div class="small muted" style="padding:10px 16px">+ ${ex.length - 60} more (all listed in the round proof)</div>` : '')
       : '<div class="empty">Nothing excluded.</div>';
   }
 
@@ -92,7 +94,7 @@ export async function renderMarket(root: HTMLElement, id: number) {
     const rows = await api<any[]>(`/api/results/${m!.id}`).catch(() => []);
     el.innerHTML = rows.length ? `<table><thead><tr><th>Round</th><th class="num">Result</th><th>Outcome</th><th>Proof</th></tr></thead><tbody>
       ${rows.slice(0, 8).map((r) => { const x = Number(r.result_e18) / 1e18; return `<tr><td class="mono">#${r.round_id}</td><td class="num ${x > 1 ? 'up' : x < 1 ? 'down' : ''}">${fmtPct(x - 1)}</td>
-      <td>${x === 1 ? '<span class="tag tag-warn">refund</span>' : x > 1 ? '<span class="tag tag-long">long</span>' : '<span class="tag tag-short">short</span>'}</td><td><a class="small" href="#/round/${m!.id}/${r.round_id}">verify →</a></td></tr>`; }).join('')}</tbody></table>`
+      <td>${x === 1 ? '<span class="tag tag-warn">refund</span>' : x > 1 ? '<span class="tag tag-up">long won</span>' : '<span class="tag tag-down">short won</span>'}</td><td><a class="small" style="color:var(--accent)" href="#/round/${m!.id}/${r.round_id}">verify →</a></td></tr>`; }).join('')}</tbody></table>`
       : '<div class="empty">No rounds computed yet.</div>';
   }
 
@@ -120,20 +122,20 @@ export async function renderMarket(root: HTMLElement, id: number) {
       <div class="row between"><h3>Round #${r}</h3><span class="small muted">locks in <span class="countdown" id="lock-cd">—</span></span></div>
       ${lim.paused ? '<div class="notice notice-bad mt">Paused: deposits disabled.</div>' : ''}
       ${skewBar(rd.longTotal, rd.shortTotal)}
-      <div class="small muted">Funding right now: <span class="${rd.shortTotal > rd.longTotal ? 'down' : 'up'}">${fundRate ? `${rd.shortTotal > rd.longTotal ? 'shorts' : 'longs'} pay ${(fundRate * 100).toFixed(2)}%` : 'none (balanced or empty)'}</span></div>
-      <div class="side-toggle mt"><button data-s="long">Long ↑</button><button data-s="short">Short ↓</button></div>
+      <div class="small muted">Funding right now: <span style="color:var(--text)">${fundRate ? `${rd.shortTotal > rd.longTotal ? 'shorts' : 'longs'} pay ${(fundRate * 100).toFixed(2)}%` : 'none (balanced or empty)'}</span></div>
+      <div class="seg mt"><button data-s="long">Long</button><button data-s="short">Short</button></div>
       <div class="field"><label><span>Amount</span><span>${state.account ? `Balance ${fmtHype(bal)} HYPE` : ''}</span></label>
         <div class="input"><input id="amt" inputmode="decimal" placeholder="0.00" autocomplete="off" /><span class="unit">HYPE</span></div>
         <div class="chips">${['0.1', '0.5', '1', '5'].map((v) => `<button class="chip" data-v="${v}">${v}</button>`).join('')}</div></div>
       <div class="preview" id="pv"></div>
       <div class="small muted mt">Min ${fmtHype(lim.minDeposit)} · max ${fmtHype(lim.maxWallet)} per wallet per round (room left ${fmtHype(room > 0n ? room : 0n)}) · side cap ${fmtHype(lim.maxSide)}</div>
       <button class="btn btn-block mt" id="go"></button>
-      <p class="small faint mt">Unaudited contract. You may lose your entire deposit.</p>`;
+      <p class="small faint mt">Unaudited and betting-like. You can lose your entire deposit. <a href="#/trust" style="color:var(--accent)">Rules</a></p>`;
     const amtEl = el.querySelector('#amt') as HTMLInputElement;
     const go = el.querySelector('#go') as HTMLButtonElement;
     const setSide = (s: 'long' | 'short') => {
       side = s;
-      el.querySelectorAll('.side-toggle button').forEach((b) => (b as HTMLElement).className = (b as HTMLElement).dataset.s === s ? 'on-' + s : '');
+      el.querySelectorAll('.seg button').forEach((b) => (b as HTMLElement).className = (b as HTMLElement).dataset.s === s ? 'on' : '');
       update();
     };
     const update = () => {
@@ -150,12 +152,12 @@ export async function renderMarket(root: HTMLElement, id: number) {
            <div class="small faint" style="margin-top:6px">Based on the pool as it stands now. Final odds lock when deposits close.</div>`;
       } else pv.innerHTML = `<div class="small muted">Enter an amount to preview payouts.</div>`;
       if (!state.account) { go.textContent = 'Connect wallet'; go.className = 'btn btn-primary btn-block mt'; go.disabled = false; return; }
-      go.className = `btn btn-block mt btn-${side}`; go.textContent = `${side === 'long' ? 'Long' : 'Short'} round #${r}`;
+      go.className = 'btn btn-primary btn-block mt'; go.textContent = `${side === 'long' ? 'Long' : 'Short'} round #${r}`;
       go.disabled = lim.paused || a < lim.minDeposit || a > room || a > bal;
       if (a > room && a > 0n) go.textContent = 'Exceeds per-wallet cap';
       else if (a > bal) go.textContent = 'Insufficient balance';
     };
-    el.querySelectorAll('.side-toggle button').forEach((b) => b.addEventListener('click', () => setSide((b as HTMLElement).dataset.s as any)));
+    el.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => setSide((b as HTMLElement).dataset.s as any)));
     el.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => { amtEl.value = (b as HTMLElement).dataset.v!; update(); }));
     amtEl.addEventListener('input', update);
     go.addEventListener('click', async () => {
@@ -226,9 +228,9 @@ export function acknowledge(): Promise<boolean> {
     modal(`<h2>Before you deposit</h2>
       <p class="muted">SLOPX is experimental, unaudited software that works like a bet. Please confirm:</p>
       <label class="check"><input type="checkbox" /> I understand I can lose my entire deposit.</label>
-      <label class="check"><input type="checkbox" /> I understand results are posted by a keeper I have to trust, subject to a dispute window. See the <a href="#/docs/trust" class="up">trust model</a>.</label>
+      <label class="check"><input type="checkbox" /> I understand results are posted by a keeper I have to trust, subject to a dispute window. See <a href="#/docs/trust" style="color:var(--accent)">what you trust</a>.</label>
       <label class="check"><input type="checkbox" /> I am not in a restricted region, and it is legal for me to use this where I live.</label>
-      <label class="check"><input type="checkbox" /> I have read the <a href="#/terms" class="up">Terms &amp; Risk</a> page.</label>
+      <label class="check"><input type="checkbox" /> I understand this is betting-like, not investing, and nothing here promises a return. I have read the <a href="#/trust" style="color:var(--accent)">rules &amp; risks</a>.</label>
       <div class="row mt-lg" style="justify-content:flex-end"><button class="btn btn-ghost" id="no">Cancel</button><button class="btn btn-primary" id="yes" disabled>I agree</button></div>`,
     (root, close) => {
       const boxes = [...root.querySelectorAll('input[type=checkbox]')] as HTMLInputElement[];

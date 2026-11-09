@@ -14,7 +14,7 @@ export async function renderPortfolio(root: HTMLElement) {
   el.innerHTML = `<div class="stats" style="grid-template-columns:repeat(3,1fr)"><div class="stat"><div class="label">Wallet</div><div class="value">${short(state.account)}</div></div>
     <div class="stat"><div class="label">Total deposited</div><div class="value">${fmtHype(dep)} HYPE</div></div><div class="stat"><div class="label">Total claimed</div><div class="value">${fmtHype(cl)} HYPE</div></div></div>
     <div class="card mt-lg"><div class="table-wrap">${rows.length ? `<table><thead><tr><th>Event</th><th>Market</th><th>Round</th><th class="num">Amount</th><th>Tx</th></tr></thead><tbody>
-    ${rows.map((e: any) => { const j = JSON.parse(e.json); return `<tr><td>${esc(e.name)}${j.side !== undefined ? ` <span class="tag ${Number(j.side) === 0 ? 'tag-long' : 'tag-short'}">${Number(j.side) === 0 ? 'long' : 'short'}</span>` : ''}</td>
+    ${rows.map((e: any) => { const j = JSON.parse(e.json); return `<tr><td>${esc(e.name)}${j.side !== undefined ? ` <span class="tag ${Number(j.side) === 0 ? 'tag-up' : 'tag-down'}">${Number(j.side) === 0 ? 'long' : 'short'}</span>` : ''}</td>
     <td><a href="#/market/${e.market_id}">${esc(state.cfg!.markets[e.market_id]?.name ?? e.market_id)}</a></td><td class="mono">#${e.round_id}</td><td class="num">${j.amount ? fmtHype(BigInt(j.amount)) : '—'}</td>
     <td><a class="small" href="${explorerTx(e.tx)}" target="_blank" rel="noopener">${e.tx.slice(0, 10)}…</a></td></tr>`; }).join('')}</tbody></table>` : '<div class="empty">No activity for this wallet yet.</div>'}</div></div>`;
 }

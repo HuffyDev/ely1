@@ -5,13 +5,14 @@ import indexMethod from '../../../docs/index-method.md?raw';
 import trust from '../../../docs/trust.md?raw';
 import threats from '../../../docs/THREAT_MODEL.md?raw';
 import terms from '../../../docs/terms.md?raw';
+import rules from '../../../docs/rules.md?raw';
 import { state, esc } from '../lib';
 
 const PAGES: Record<string, { title: string; md: () => string }> = {
   '': { title: 'How it works', md: () => howItWorks },
   index: { title: 'Index methodology', md: () => indexMethod },
   funding: { title: 'Funding & simulation', md: () => funding + '\n\n' + fundingSim.replace(/^# .*$/m, '## Simulation results') },
-  trust: { title: 'Trust model', md: () => trust },
+  trust: { title: 'What you trust', md: () => trust },
   threats: { title: 'Threat model', md: () => threats },
   contract: { title: 'Contract & network', md: contractPage },
 };
@@ -26,6 +27,10 @@ function contractPage() {
 | RPC | \`${c.chain.rpc}\` |
 | Explorer | ${c.chain.explorer ? `[${c.chain.explorer}](${c.chain.explorer})` : '—'} |
 | SlopxPools | ${c.contract ? `\`${c.contract}\`` : 'not deployed on this site yet'} |
+| Index data chain | Elysium (chain id \`${c.dataChain.id}\`) |
+| Uniswap v4 PoolManager | \`${c.dataChain.poolManager}\` |
+| WHYPE | \`${c.dataChain.whype}\` |
+| Verified launchpad labels | ${c.labels.filter((l) => l.hooks.length).map((l) => `${l.name} (${l.hooks.length} hook${l.hooks.length > 1 ? 's' : ''})`).join(', ') || 'none yet: launchpads are shown by hook address'} |
 | Index method | \`${c.index.method}\` |
 | Round length | ${state.timing ? state.timing.duration / 60 + ' min' : '—'} |
 | Dispute window | ${state.timing ? state.timing.disputeWindow / 60 + ' min' : '—'} |
@@ -71,10 +76,19 @@ export function md(src: string): string {
 export function renderDocs(root: HTMLElement, page = '') {
   const p = PAGES[page] ?? PAGES[''];
   root.innerHTML = `<div class="doc"><nav class="doc-nav">${Object.entries(PAGES).map(([k, v]) => `<a href="#/docs${k ? '/' + k : ''}" class="${k === page ? 'active' : ''}">${v.title}</a>`).join('')}
-    <a href="#/terms">Terms &amp; Risk</a></nav><article class="prose">${md(p.md())}</article></div>`;
+    <a href="#/trust">Rules &amp; Risk</a><a href="#/terms">Terms</a></nav><article class="prose">${md(p.md())}</article></div>`;
 }
 
 export function renderTerms(root: HTMLElement) {
-  const regions = state.geo?.country ? `<div class="notice ${state.geo.blocked ? 'notice-bad' : 'notice-info'}">Detected region: <strong>${esc(state.geo.country)}</strong>${state.geo.blocked ? ' — SLOPX is not available here.' : ''}</div>` : '';
-  root.innerHTML = `<div class="doc"><nav class="doc-nav"><a href="#/docs">Docs</a><a href="#/docs/trust">Trust model</a><a href="#/docs/threats">Threat model</a><a class="active" href="#/terms">Terms &amp; Risk</a></nav><article class="prose">${regions}${md(terms)}</article></div>`;
+  root.innerHTML = `<div class="doc"><nav class="doc-nav"><a href="#/trust">Rules &amp; Risk</a><a href="#/docs/trust">What you trust</a><a href="#/docs/threats">Threat model</a><a class="active" href="#/terms">Terms</a></nav><article class="prose">${md(terms)}</article></div>`;
+}
+
+export function renderTrust(root: HTMLElement) {
+  const g = state.geo as any;
+  const regions = `<div class="card card-pad" style="margin:16px 0">
+    <div class="row between wrap"><strong>Blocked regions (live config)</strong><span class="small muted">set with <code>BLOCKED_REGIONS</code></span></div>
+    <div class="row wrap mt" style="gap:6px">${(g?.blockedRegions ?? []).map((r: string) => `<span class="tag">${esc(r)}</span>`).join('') || '<span class="muted small">none configured</span>'}</div>
+    <div class="small muted mt">Your detected region: <strong>${g?.country ? esc(g.country) : 'unknown (no country header from the host)'}</strong>${g?.blocked ? ' — deposits are blocked for you.' : ''}</div></div>`;
+  const html = md(rules).replace(/(<h2>Regional blocking<\/h2>\s*<p>[\s\S]*?<\/p>)/, `$1${regions}`);
+  root.innerHTML = `<div class="doc fade-in"><nav class="doc-nav"><a class="active" href="#/trust">Rules &amp; Risk</a><a href="#/docs/trust">What you trust</a><a href="#/docs/threats">Threat model</a><a href="#/terms">Terms</a></nav><article class="prose">${html}</article></div>`;
 }

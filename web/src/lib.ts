@@ -8,9 +8,11 @@ export interface AppConfig {
   chain: { id: number; name: string; rpc: string; explorer?: string };
   contract: Address | null;
   markets: MarketDef[];
-  index: { method: string; minLiquidityUsd: number; minSellers24h: number; maxWeight: number; minConstituents: number; sampleWindowSec: number; universeWindowSec: number };
+  dataChain: { id: number; poolManager: string; whype: string };
+  labels: { name: string; hooks: string[]; source: string | null }[];
+  index: { method: string; minLiquidityHype: number; minSellers24h: number; maxWeight: number; minConstituents: number; sampleWindowSec: number; universeWindowSec: number; launchpadMinLaunches: number };
   defaultParams: Record<string, number>;
-  data: { geckoNetwork: string | null; lastSample: number | null; trackedTokens24h: number; keeperEnabled: boolean };
+  data: { lastSample: number | null; launches24h: number; keeperEnabled: boolean; poolManagerOk: boolean };
 }
 
 export const state: {
@@ -109,8 +111,12 @@ export const emit = () => listeners.forEach((f) => f());
 export const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 export function fmtHype(v: bigint, dp = 3) { const n = Number(formatEther(v)); return n.toLocaleString(undefined, { maximumFractionDigits: dp, minimumFractionDigits: n > 0 && n < 1 ? Math.min(dp, 2) : 0 }); }
 export const fmtPct = (x: number, dp = 2) => (x >= 0 ? '+' : '') + (x * 100).toFixed(dp) + '%';
+export const fmtH = (x: number | null | undefined) => x == null ? '—' : (x >= 1000 ? (x / 1000).toFixed(1) + 'k' : x.toFixed(x >= 100 ? 0 : 1)) + ' HYPE';
+/** launchpad label: verified name, or shortened hook address */
+export const padName = (lp: string) => lp?.startsWith('0x') ? 'hook ' + lp.slice(0, 6) + '…' + lp.slice(-4) : lp;
+export const ELYSIUM_EXPLORER = 'https://explorer.elysium.kinetiq.xyz';
 export const fmtUsd = (x: number) => x >= 1e6 ? '$' + (x / 1e6).toFixed(2) + 'M' : x >= 1e3 ? '$' + (x / 1e3).toFixed(1) + 'k' : '$' + x.toFixed(0);
-export function fmtPrice(x: number | null | undefined) { if (x == null) return '—'; if (x >= 1) return '$' + x.toFixed(4); const s = x.toPrecision(4); return '$' + (x < 1e-6 ? Number(s).toExponential(3) : s); }
+export function fmtPrice(x: number | null | undefined) { if (x == null) return '—'; if (x >= 1) return x.toFixed(4); return x < 1e-4 ? x.toExponential(3) : x.toPrecision(4); }
 export const short = (a: string) => a.slice(0, 6) + '…' + a.slice(-4);
 export function dur(s: number) { if (s < 0) s = 0; const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return (h ? h + 'h ' : '') + String(m).padStart(2, '0') + 'm ' + String(ss).padStart(2, '0') + 's'; }
 export function ago(ts: number) { const s = nowSec() - ts; if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; }
@@ -135,6 +141,15 @@ export function modal(html: string, onMount?: (root: HTMLElement, close: () => v
   return close;
 }
 
+export function initTheme() {
+  const btn = document.getElementById('theme');
+  btn?.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    const next = dark ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next; LS.set('slopx-theme', next);
+  });
+}
+
 export const LS = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
@@ -142,7 +157,7 @@ export const LS = {
 
 export function marketBlurb(m: MarketDef) {
   if (m.legs.length === 1) return m.legs[0].launchpads === 'all'
-    ? 'Weighted-median return of every token launched on Elysium in the last 24h. Long if the trenches pump this hour, short if they bleed.'
-    : `Weighted-median return of ${m.legs[0].name} launches over the last 24h.`;
-  return `${m.legs[0].name} launches vs ${m.legs[1].name} launches. Long = ${m.legs[0].name} outperforms this hour.`;
+    ? 'Every token launched on Elysium in the last 24 hours, as one median index.'
+    : `${m.legs[0].name} launches from the last 24 hours.`;
+  return `${m.legs[0].name} launches against ${m.legs[1].name} launches. Long means ${m.legs[0].name} outperforms this hour.`;
 }

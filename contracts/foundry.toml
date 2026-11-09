@@ -9,3 +9,8 @@ via_ir = true
 
 [fuzz]
 runs = 2000
+
+[invariant]
+runs = 128
+depth = 200
+fail_on_revert = false

@@ -56,8 +56,9 @@ contract SlopxPools {
     uint256 public disputeWindow = 600;      // seconds a proposal must sit before finalize
     uint256 public maxPriceDelay = 6 hours;  // after round end, no result => void
     uint256 public minDeposit = 0.01 ether;
-    uint256 public maxWalletPerRound = 10 ether;   // per wallet, per market-round, both sides
-    uint256 public maxSidePerRound = 500 ether;    // per side, per market-round
+    // Deliberately low launch caps: this code is unaudited. Owner can raise within setLimits bounds.
+    uint256 public maxWalletPerRound = 1 ether;    // per wallet, per market-round, both sides
+    uint256 public maxSidePerRound = 25 ether;     // per side, per market-round
 
     uint256 public marketCount;
     mapping(uint256 => Market) public markets;
@@ -111,7 +112,7 @@ contract SlopxPools {
         keeper = _keeper;
         guardian = _guardian;
         treasury = _treasury;
-        params = Params({feeBps: 200, maxProfitBps: 50_000, fundingK: 1_000, fundingMaxBps: 500, fundingCapBps: 5_000, tieBps: 1});
+        params = Params({feeBps: 200, maxProfitBps: 50_000, fundingK: 500, fundingMaxBps: 250, fundingCapBps: 5_000, tieBps: 1});
     }
 
     // ------------------------------------------------------------------ time helpers
@@ -305,7 +306,8 @@ contract SlopxPools {
     }
 
     function setLimits(uint256 _minDeposit, uint256 _maxWallet, uint256 _maxSide) external onlyOwner {
-        if (_minDeposit == 0 || _maxWallet < _minDeposit || _maxSide < _maxWallet) revert BadParam();
+        // hard ceilings so a compromised owner key cannot open the pools wide
+        if (_minDeposit == 0 || _maxWallet < _minDeposit || _maxSide < _maxWallet || _maxWallet > 10 ether || _maxSide > 500 ether) revert BadParam();
         minDeposit = _minDeposit; maxWalletPerRound = _maxWallet; maxSidePerRound = _maxSide;
     }
 

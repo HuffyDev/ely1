@@ -1,10 +1,10 @@
 import './styles.css';
-import { boot, state, connect, onChange, short, toast } from './lib';
+import { boot, state, connect, onChange, short, toast, initTheme } from './lib';
 import { renderMarkets } from './pages/markets';
 import { renderMarket } from './pages/market';
 import { renderHistory, renderProof } from './pages/history';
 import { renderPortfolio } from './pages/portfolio';
-import { renderDocs, renderTerms } from './pages/docs';
+import { renderDocs, renderTerms, renderTrust } from './pages/docs';
 
 const app = document.getElementById('app')!;
 let cleanup: (() => void) | void;
@@ -12,7 +12,7 @@ let cleanup: (() => void) | void;
 async function route() {
   if (typeof cleanup === 'function') cleanup();
   cleanup = undefined;
-  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const parts = location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
   const [p0, p1, p2] = parts;
   document.querySelectorAll('#nav a, .mobile-nav a').forEach((a) => a.classList.toggle('active', (a as HTMLElement).dataset.r === (p0 === 'market' || !p0 ? 'markets' : p0 === 'round' ? 'history' : p0)));
   window.scrollTo(0, 0);
@@ -24,6 +24,7 @@ async function route() {
     else if (p0 === 'portfolio') await renderPortfolio(app);
     else if (p0 === 'docs') renderDocs(app, p1 ?? '');
     else if (p0 === 'terms') renderTerms(app);
+    else if (p0 === 'trust') renderTrust(app);
     else app.innerHTML = '<div class="empty"><h4>Page not found</h4><a href="#/">Back to markets</a></div>';
   } catch (e) {
     console.error(e);
@@ -34,7 +35,7 @@ async function route() {
 function renderChrome() {
   const btn = document.getElementById('connect') as HTMLButtonElement;
   btn.textContent = state.account ? short(state.account) : 'Connect wallet';
-  btn.className = state.account ? 'btn' : 'btn btn-primary';
+  btn.className = state.account ? 'btn btn-sm' : 'btn btn-primary btn-sm';
   const pill = document.getElementById('net-pill')!;
   const ok = !!state.timing;
   pill.innerHTML = `<i class="dot ${ok ? 'ok' : state.cfg?.contract ? 'bad' : 'warn'}"></i><span>${state.cfg?.chain.name ?? '…'}</span>`;
@@ -43,6 +44,7 @@ function renderChrome() {
 }
 
 (async () => {
+  initTheme();
   // mobile nav
   const nav = document.getElementById('nav')!;
   const mob = document.createElement('nav'); mob.className = 'mobile-nav'; mob.innerHTML = nav.innerHTML;

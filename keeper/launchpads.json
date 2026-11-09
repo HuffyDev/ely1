@@ -1,8 +1,8 @@
 [
-  { "name": "montra",   "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
-  { "name": "ascend",   "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
-  { "name": "obol",     "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
-  { "name": "elyspump", "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
-  { "name": "volta",    "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
-  { "name": "kleos",    "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null }
+  { "name": "montra",   "hooks": [], "source": "UNVERIFIED: add hook address(es) only after confirming them on Montra's official docs/app and the explorer" },
+  { "name": "ascend",   "hooks": [], "source": "UNVERIFIED: Ascend docs say tokens trade in hook pools quoted in USDC/RWA; USDC-quoted pools are out of scope for index v2" },
+  { "name": "obol",     "hooks": [], "source": "UNVERIFIED" },
+  { "name": "elyspump", "hooks": [], "source": "UNVERIFIED" },
+  { "name": "volta",    "hooks": [], "source": "UNVERIFIED" },
+  { "name": "kleos",    "hooks": [], "source": "UNVERIFIED" }
 ]

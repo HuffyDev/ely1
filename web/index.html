@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SLOPX — Short the trenches</title>
-  <meta name="description" content="Hourly long/short pools on an index of every token launched on Elysium in the past 24 hours. Every coin here only goes one way. Now short all of them." />
-  <meta name="theme-color" content="#0a0b0d" />
+  <title>SLOPX — Short every new launch</title>
+  <meta name="description" content="Hourly long/short pools on an index of every token launched on Elysium in the past 24 hours, plus launchpad-vs-launchpad pairs." />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;550;600;650&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script>try{var t=localStorage.getItem('slopx-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
 <body>
   <div id="geo-banner" hidden></div>
   <header class="topbar">
     <a href="#/" class="brand" aria-label="SLOPX home">
-      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#c6f432"/><path d="M8 11l8 10 8-10" stroke="#0a0b0d" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brand-mark"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4l4 4.5L10 4"/></svg></span>
       <span>SLOPX</span>
     </a>
     <nav class="nav" id="nav">
@@ -23,20 +23,21 @@
       <a href="#/history" data-r="history">Rounds</a>
       <a href="#/portfolio" data-r="portfolio">Portfolio</a>
       <a href="#/docs" data-r="docs">Docs</a>
-      <a href="#/terms" data-r="terms">Terms &amp; Risk</a>
+      <a href="#/trust" data-r="trust">Rules &amp; Risk</a>
     </nav>
     <div class="top-right">
       <span class="net-pill" id="net-pill" title="Network"><i class="dot"></i><span>…</span></span>
-      <button class="btn btn-primary" id="connect">Connect wallet</button>
+      <button class="icon-btn" id="theme" title="Toggle light / dark" aria-label="Toggle theme">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="btn btn-primary btn-sm" id="connect">Connect wallet</button>
     </div>
   </header>
   <main id="app" class="container"></main>
   <footer class="footer container">
-    <div>
-      <strong>SLOPX</strong> — unaudited experimental software. You can lose your entire deposit. Not available in restricted regions.
-    </div>
+    <div>SLOPX is unaudited, experimental and betting-like. You can lose your entire deposit. Not available in restricted regions.</div>
     <div class="footer-links">
-      <a href="#/terms">Terms &amp; Risk</a><a href="#/docs/trust">Trust model</a><a href="#/docs/threats">Threat model</a><a href="https://github.com/HuffyDev/ely1" target="_blank" rel="noopener">Source</a>
+      <a href="#/trust">Rules &amp; Risk</a><a href="#/docs/trust">What you trust</a><a href="#/docs/threats">Threat model</a><a href="https://github.com/HuffyDev/ely1" target="_blank" rel="noopener">Source</a>
     </div>
   </footer>
   <div id="modal-root"></div>

@@ -1,6 +1,6 @@
 import { keccak256, toHex } from 'viem';
-import { state, api, esc, fmtPct, fmtHype, explorerTx, readRound, STATUS, roundStart, fmtPrice, fmtUsd, short, contractRef } from '../lib';
-import { canonicalJson, legRatio, finaliseRound } from '../../../keeper/src/indexMath';
+import { state, api, esc, fmtPct, fmtHype, explorerTx, readRound, STATUS, roundStart, fmtPrice, fmtH, padName, short, contractRef } from '../lib';
+import { canonicalJson, recompute } from '../../../keeper/src/indexMath';
 
 export async function renderHistory(root: HTMLElement, marketId = 0) {
   const cfg = state.cfg!;
@@ -20,7 +20,7 @@ export async function renderHistory(root: HTMLElement, marketId = 0) {
       ${r.legs.map((l: any) => `<td class="num">${l.ratio ? fmtPct(Number(l.ratio) - 1) : '—'} <span class="faint small">(${l.count})</span></td>`).join('')}
       <td class="num">${c ? fmtHype(c.longTotal) : '—'}</td><td class="num">${c ? fmtHype(c.shortTotal) : '—'}</td><td>${c ? (c.longTotal + c.shortTotal === 0n ? '<span class="faint small">no deposits</span>' : `<span class="tag">${STATUS[c.status]}</span>`) : '—'}</td>
       <td class="small">${r.proposed_tx ? `<a href="${explorerTx(r.proposed_tx)}" target="_blank" rel="noopener">propose</a>` : '<span class="faint">—</span>'} ${r.settled_tx ? `· <a href="${explorerTx(r.settled_tx)}" target="_blank" rel="noopener">settle</a>` : ''}</td>
-      <td><a class="small up" href="#/round/${marketId}/${r.round_id}">proof →</a></td></tr>`; }).join('')}</tbody></table>`;
+      <td><a class="small" style="color:var(--accent)" href="#/round/${marketId}/${r.round_id}">proof →</a></td></tr>`; }).join('')}</tbody></table>`;
   }
   const ev = await api<any[]>(`/api/events/${marketId}`).catch(() => []);
   root.querySelector('#ev')!.innerHTML = ev.length ? `<table><thead><tr><th>Event</th><th>Round</th><th>Wallet</th><th class="num">Detail</th><th>Tx</th></tr></thead><tbody>
@@ -43,13 +43,7 @@ export async function renderProof(root: HTMLElement, marketId: number, roundId: 
     try { onchain = await state.client!.readContract({ ...contractRef(), functionName: 'proposals', args: [BigInt(marketId), BigInt(roundId)] }); } catch { /* ignore */ }
   }
   // independent recomputation in the browser
-  const legs = rc.legs.map((l: any) => {
-    const cons = l.constituents.map((c: any) => ({ ...c, included: c.included || c.excludeReason === 'missing-price', excludeReason: c.excludeReason === 'missing-price' ? undefined : c.excludeReason }));
-    const { ratio, count } = legRatio(cons, rc.config);
-    return { name: l.name, launchpads: l.launchpads, constituents: cons, ratio: ratio === undefined ? null : ratio.toString(), count };
-  });
-  const { resultE18: _a, note: _b, ...base } = rc;
-  const again = finaliseRound({ ...base, legs });
+  const again = recompute(JSON.parse(JSON.stringify(rc)));
   const match = again.resultE18 === rc.resultE18;
   const onHash = onchain ? (onchain[1] as string) : null;
   const zero = '0x' + '0'.repeat(64);
@@ -57,7 +51,7 @@ export async function renderProof(root: HTMLElement, marketId: number, roundId: 
 
   el.innerHTML = `<div class="grid-2">
     <div class="card card-pad"><div class="small muted">Result posted (1.0 = flat)</div><div class="big-num ${x > 1 ? 'up' : x < 1 ? 'down' : ''}">${x.toFixed(6)} <span class="small">(${fmtPct(x - 1)})</span></div>
-      <div class="mt">${x === 1 ? '<span class="tag tag-warn">Refund</span>' : x > 1 ? '<span class="tag tag-long">Long wins</span>' : '<span class="tag tag-short">Short wins</span>'} ${rc.note ? `<span class="small muted">${esc(rc.note)}</span>` : ''}</div></div>
+      <div class="mt">${x === 1 ? '<span class="tag tag-warn">Refund</span>' : x > 1 ? '<span class="tag tag-up">Long won</span>' : '<span class="tag tag-down">Short won</span>'} ${rc.note ? `<span class="small muted">${esc(rc.note)}</span>` : ''}</div></div>
     <div class="card card-pad"><dl class="kv">
       <dt>Recomputed in your browser</dt><dd class="${match ? 'up' : 'down'}">${match ? '✓ match' : '✗ MISMATCH'}</dd>
       <dt>Hash of published JSON</dt><dd class="hash">${localHash.slice(0, 18)}…</dd>
@@ -67,12 +61,13 @@ export async function renderProof(root: HTMLElement, marketId: number, roundId: 
       <div class="row mt"><a class="btn btn-sm" href="/api/result/${marketId}/${roundId}/raw">Download JSON</a></div></div>
   </div>
   <div class="card mt-lg card-pad"><h3>Verify it yourself</h3><pre class="mono small" style="white-space:pre-wrap;color:var(--muted);margin-top:10px">git clone https://github.com/HuffyDev/ely1 && cd ely1 && npm install
-npm run recompute -w keeper -- ${location.origin}/api/result/${marketId}/${roundId}/raw ${onHash && onHash !== zero ? onHash : '<onchain dataHash>'}</pre>
+npm run recompute -w keeper -- ${location.origin}/api/result/${marketId}/${roundId}/raw ${onHash && onHash !== zero ? onHash : '<onchain dataHash>'} --verify-chain <elysium-archive-rpc></pre>
+  <p class="small muted">Data chain ${rc.dataChainId}, Uniswap v4 PoolManager <code>${esc(rc.poolManager)}</code>. Universe: pools initialised in blocks ${rc.window?.fromBlock}–${rc.window?.toBlock}. A hook counts as a launchpad if it created ≥ ${rc.config.launchpadMinLaunches} pools in that window, or if it carries a verified label. Each sample is <code>sqrtPriceX96</code> read at a published block, which <code>--verify-chain</code> re-reads from an archive node.</p>
   <p class="small muted">The JSON lists each constituent's raw price samples in the windows [start−${rc.config.sampleWindowSec}s, start] and [end−${rc.config.sampleWindowSec}s, end]. Each price is the median of its samples. Each return is end/start. The result is the liquidity-weighted median return, with weights capped at ${(rc.config.maxWeight * 100).toFixed(0)}%${rc.legs.length > 1 ? ', and for a pair it is leg A ÷ leg B' : ''}.</p></div>
   ${rc.legs.map((l: any) => `<div class="card mt-lg"><div class="card-head"><h3>${esc(l.name)}</h3><span class="small muted">ratio ${l.ratio ? Number(l.ratio).toFixed(6) : 'n/a'} · ${l.count} priced</span></div><div class="table-wrap"><table>
-   <thead><tr><th>Token</th><th>Launchpad</th><th class="num">Liquidity</th><th class="num">Weight</th><th class="num">Start (median of n)</th><th class="num">End (median of n)</th><th class="num">Return</th><th>Status</th></tr></thead><tbody>
-   ${l.constituents.map((c: any) => `<tr><td>${esc(c.symbol)} <span class="faint mono small">${short(c.token)}</span></td><td>${esc(c.launchpad)}</td><td class="num">${fmtUsd(c.liquidityUsd)}</td><td class="num">${c.weight ? (c.weight * 100).toFixed(2) + '%' : '—'}</td>
+   <thead><tr><th>Token</th><th>Launchpad</th><th>Pool</th><th class="num">Depth</th><th class="num">Sellers</th><th class="num">Weight</th><th class="num">Start (median of n)</th><th class="num">End (median of n)</th><th class="num">Return</th><th>Status</th></tr></thead><tbody>
+   ${[...l.constituents].sort((a: any, b: any) => Number(b.included) - Number(a.included) || b.liquidityHype - a.liquidityHype).slice(0, 150).map((c: any) => `<tr><td>${esc(c.symbol)} <span class="faint mono small">${short(c.token)}</span></td><td>${esc(padName(c.launchpad))}</td><td class="mono small muted" title="${esc(c.pool)}">${esc(c.pool.slice(0, 10))}…</td><td class="num">${fmtH(c.liquidityHype)}</td><td class="num">${c.sellers24h}</td><td class="num">${c.weight ? (c.weight * 100).toFixed(2) + '%' : '—'}</td>
    <td class="num">${fmtPrice(c.startPrice)} <span class="faint">(${c.startSamples?.length ?? 0})</span></td><td class="num">${fmtPrice(c.endPrice)} <span class="faint">(${c.endSamples?.length ?? 0})</span></td>
-   <td class="num ${c.ret > 1 ? 'up' : c.ret < 1 ? 'down' : ''}">${c.ret ? fmtPct(c.ret - 1) : '—'}</td><td>${c.included ? '<span class="tag tag-long">in</span>' : `<span class="tag tag-warn">${esc(c.excludeReason)}</span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No candidates</td></tr>'}
+   <td class="num ${c.ret > 1 ? 'up' : c.ret < 1 ? 'down' : ''}">${c.ret ? fmtPct(c.ret - 1) : '—'}</td><td>${c.included ? '<span class="tag tag-up">in</span>' : `<span class="tag tag-warn">${esc(c.excludeReason)}</span>`}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">No candidates</td></tr>'}
    </tbody></table></div></div>`).join('')}`;
 }
