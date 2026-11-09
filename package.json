@@ -1,0 +1,17 @@
+{
+  "name": "slopx",
+  "private": true,
+  "workspaces": ["keeper", "web"],
+  "scripts": {
+    "build": "npm run build -w web",
+    "start": "npm run build && npm run server -w keeper",
+    "server": "npm run server -w keeper",
+    "keeper": "npm run keeper -w keeper",
+    "dev": "npm run dev -w web",
+    "sim": "npm run sim -w keeper",
+    "test": "npm test -w keeper && cd contracts && forge test",
+    "test:ts": "npm test -w keeper",
+    "abi": "node scripts/abi.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

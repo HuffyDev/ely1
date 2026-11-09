@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SLOPX — Short the trenches</title>
+  <meta name="description" content="Hourly long/short pools on an index of every token launched on Elysium in the past 24 hours. Every coin here only goes one way. Now short all of them." />
+  <meta name="theme-color" content="#0a0b0d" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="geo-banner" hidden></div>
+  <header class="topbar">
+    <a href="#/" class="brand" aria-label="SLOPX home">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#c6f432"/><path d="M8 11l8 10 8-10" stroke="#0a0b0d" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>SLOPX</span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#/" data-r="markets">Markets</a>
+      <a href="#/history" data-r="history">Rounds</a>
+      <a href="#/portfolio" data-r="portfolio">Portfolio</a>
+      <a href="#/docs" data-r="docs">Docs</a>
+      <a href="#/terms" data-r="terms">Terms &amp; Risk</a>
+    </nav>
+    <div class="top-right">
+      <span class="net-pill" id="net-pill" title="Network"><i class="dot"></i><span>…</span></span>
+      <button class="btn btn-primary" id="connect">Connect wallet</button>
+    </div>
+  </header>
+  <main id="app" class="container"></main>
+  <footer class="footer container">
+    <div>
+      <strong>SLOPX</strong> — unaudited experimental software. You can lose your entire deposit. Not available in restricted regions.
+    </div>
+    <div class="footer-links">
+      <a href="#/terms">Terms &amp; Risk</a><a href="#/docs/trust">Trust model</a><a href="#/docs/threats">Threat model</a><a href="https://github.com/HuffyDev/ely1" target="_blank" rel="noopener">Source</a>
+    </div>
+  </footer>
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "slopx-keeper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "keeper": "tsx src/keeper.ts",
+    "server": "tsx src/server.ts",
+    "sim": "tsx src/sim/funding-sim.ts",
+    "recompute": "tsx src/recompute.ts",
+    "test": "tsx --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

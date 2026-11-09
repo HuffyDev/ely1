@@ -1,0 +1,8 @@
+[
+  { "name": "montra",   "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
+  { "name": "ascend",   "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
+  { "name": "obol",     "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
+  { "name": "elyspump", "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
+  { "name": "volta",    "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null },
+  { "name": "kleos",    "geckoDexIds": [], "factory": null, "event": null, "tokenArg": null }
+]

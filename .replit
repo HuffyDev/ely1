@@ -1,0 +1,11 @@
+run = "npm start"
+modules = ["nodejs-20"]
+
+[deployment]
+run = ["sh", "-c", "npm run server"]
+build = ["sh", "-c", "npm install && npm run build"]
+deploymentTarget = "vm"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
