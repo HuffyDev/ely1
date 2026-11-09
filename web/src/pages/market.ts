@@ -68,7 +68,7 @@ export async function renderMarket(root: HTMLElement, id: number) {
     }
     const r = live.liveRatio as number | null;
     body.innerHTML = `<div class="row between wrap">
-      <div><div class="small muted">${m!.legs.length > 1 ? `${esc(m!.legs[0].name)} ÷ ${esc(m!.legs[1].name)} (weighted-median return)` : 'Weighted-median return since round start'}</div>
+      <div><div class="small muted">${m!.legs.length > 1 ? `${esc(m!.legs[0].name)} ÷ ${esc(m!.legs[1].name)} (weighted IQM of returns)` : 'Index return since round start (weighted interquartile mean)'}</div>
       <div class="big-num ${r == null || r === 1 ? '' : r > 1 ? 'up' : 'down'}">${r == null ? 'insufficient data' : fmtPct(r - 1)}</div>
       <div class="small muted">${r == null ? `Needs ≥ ${cfg.index.minConstituents} priced constituents per leg. A round without them resolves at 1.0 and everyone is refunded.` : r > 1 ? 'Long is ahead right now' : r < 1 ? 'Short is ahead right now' : 'Flat so far: an exactly flat round refunds'}</div></div>
       <div class="row gap-lg">${live.legs.map((l: any) => `<div><div class="small muted">${esc(l.name)}</div><div class="mono">${l.ratio ? fmtPct(l.ratio - 1) : '—'}</div><div class="small faint">${l.priced} priced</div></div>`).join('')}</div>

@@ -157,7 +157,7 @@ export const LS = {
 
 export function marketBlurb(m: MarketDef) {
   if (m.legs.length === 1) return m.legs[0].launchpads === 'all'
-    ? 'Every token launched on Elysium in the last 24 hours, as one median index.'
+    ? 'Every token launched on Elysium in the last 24 hours, as one robust median-family index.'
     : `${m.legs[0].name} launches from the last 24 hours.`;
   return `${m.legs[0].name} launches against ${m.legs[1].name} launches. Long means ${m.legs[0].name} outperforms this hour.`;
 }

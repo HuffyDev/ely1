@@ -83,6 +83,24 @@ Near-monochrome, with one indigo accent and no neon. Light and dark modes (syste
 
 The contract tests (24 unit/fuzz + 2 invariants) and the TypeScript tests (12) all pass.
 
+**Fork E2E run 3 (`scripts/fork-e2e.sh`, 9 Nov 11:48–12:11 UTC), against live mainnet index data:**
+- **Deposits:** 11, from 6 wallets across 3 markets. The over-cap deposit reverted, and so did the deposit made while paused.
+- **TRENCH24 #1:** 24 real constituents, result **1.005390** (+0.54%), long won.
+  - Effective stakes after funding: 0.595 long / 3.705 short (funding 0.095 HYPE).
+  - The 5× profit cap bound, so 2.975 HYPE moved to longs and 0.73 HYPE was returned to shorts.
+  - Long payout: 3.5105 HYPE on a 0.5 HYPE stake.
+- **Hook pair `0xe0de` vs `0x3ab8` #1:** 12 vs 9 constituents, result **1.013309**, long won. Longs were the crowded side and paid 1.29% funding.
+- **Guardian rejection, then keeper killed and restarted:** it re-proposed the **identical** hash.
+- **Fees:** 0.0799386 HYPE accrued, and exactly that reached the treasury.
+- **ORPHAN market:** got no result, so it **refunded** after 660s, at 0.3 HYPE per wallet.
+- **Resolution:** exactly one resolution event per market-round, and a second `settle` reverts on all 3.
+- **Dust:** 4 wei left in the contract after all claims.
+- **Independent recompute against real Elysium mainnet:** results and hashes **match**, and `--verify-chain` re-read **72/72** and **63/63** samples, all matching.
+- **Bugs this pass's fork runs found and fixed:**
+  - a plain median stuck at exactly 1.0 on real data, so rounds tied (switched to the IQM);
+  - stale results were reused after a contract redeploy with the same DB (fixed with deployment binding);
+  - the test driver didn't really kill the keeper (fixed).
+
 ### Not done
 - No testnet or mainnet deployment.
 - The UI was not tested with a real browser wallet. It was rendered with Playwright against the fork; it has no injected wallet.
