@@ -4,7 +4,7 @@ import { canonicalJson, recompute } from '../../../keeper/src/indexMath';
 
 export async function renderHistory(root: HTMLElement, marketId = 0) {
   const cfg = state.cfg!;
-  root.innerHTML = `<div class="section row between wrap" style="margin-top:28px"><div><h1 style="font-size:30px">Round history</h1>
+  root.innerHTML = `<div class="mhead"><div><div class="kicker">Every round, on the record</div><h1>Round history</h1>
     <p class="muted" style="margin-top:6px">Every computed round, with its result, the onchain proposal and settlement transactions, and a link to the full proof.</p></div>
     <div class="row">${cfg.markets.map((m) => `<a class="btn btn-sm ${m.id === marketId ? 'btn-primary' : ''}" href="#/history/${m.id}">${esc(m.name)}</a>`).join('')}</div></div>
     <div class="card"><div class="table-wrap" id="h"><div class="card-pad"><div class="skeleton"></div></div></div></div>
@@ -31,7 +31,7 @@ export async function renderHistory(root: HTMLElement, marketId = 0) {
 
 export async function renderProof(root: HTMLElement, marketId: number, roundId: number) {
   root.innerHTML = `<div class="section" style="margin-top:28px"><a class="small muted" href="#/history/${marketId}">← Round history</a>
-    <h1 style="font-size:30px;margin-top:8px">Settlement proof · ${esc(state.cfg!.markets[marketId]?.name)} #${roundId}</h1></div><div id="p"><div class="skeleton"></div></div>`;
+    <div class="kicker mt">Don't trust, verify</div><h1 style="font-size:48px;letter-spacing:-0.04em">Settlement proof · ${esc(state.cfg!.markets[marketId]?.name)} #${roundId}</h1></div><div id="p"><div class="skeleton"></div></div>`;
   const el = root.querySelector('#p')!;
   let data: any;
   try { data = await api(`/api/result/${marketId}/${roundId}`); }

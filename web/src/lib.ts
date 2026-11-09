@@ -144,7 +144,7 @@ export function modal(html: string, onMount?: (root: HTMLElement, close: () => v
 export function initTheme() {
   const btn = document.getElementById('theme');
   btn?.addEventListener('click', () => {
-    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    const dark = document.documentElement.dataset.theme !== 'light'; // dark is the default theme
     const next = dark ? 'light' : 'dark';
     document.documentElement.dataset.theme = next; LS.set('slopx-theme', next);
   });

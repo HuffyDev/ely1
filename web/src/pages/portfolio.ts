@@ -1,7 +1,7 @@
 import { state, connect, esc, fmtHype, short, explorerTx } from '../lib';
 
 export async function renderPortfolio(root: HTMLElement) {
-  root.innerHTML = `<div class="section" style="margin-top:28px"><h1 style="font-size:30px">Portfolio</h1><p class="muted" style="margin-top:6px">Your deposits and claims, from indexed contract events. Open a market to claim.</p></div><div id="pf"></div>`;
+  root.innerHTML = `<div class="mhead" style="display:block"><div class="kicker">Your bets</div><h1>Portfolio</h1><p class="muted" style="margin-top:6px">Your deposits and claims, from indexed contract events. Open a market to claim.</p></div><div id="pf"></div>`;
   const el = root.querySelector('#pf')!;
   if (!state.account) {
     el.innerHTML = `<div class="card empty"><h4>No wallet connected</h4><button class="btn btn-primary mt" id="c">Connect wallet</button></div>`;

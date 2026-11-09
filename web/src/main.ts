@@ -5,6 +5,7 @@ import { renderMarket } from './pages/market';
 import { renderHistory, renderProof } from './pages/history';
 import { renderPortfolio } from './pages/portfolio';
 import { renderDocs, renderTerms, renderTrust } from './pages/docs';
+import { reveal, initRipples } from './anim';
 
 const app = document.getElementById('app')!;
 let cleanup: (() => void) | void;
@@ -15,7 +16,8 @@ async function route() {
   const parts = location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
   const [p0, p1, p2] = parts;
   document.querySelectorAll('#nav a, .mobile-nav a').forEach((a) => a.classList.toggle('active', (a as HTMLElement).dataset.r === (p0 === 'market' || !p0 ? 'markets' : p0 === 'round' ? 'history' : p0)));
-  window.scrollTo(0, 0);
+  window.scrollTo({ top: 0 });
+  app.classList.remove('page-enter'); void app.offsetWidth; app.classList.add('page-enter');
   try {
     if (!p0) cleanup = await renderMarkets(app);
     else if (p0 === 'market') cleanup = await renderMarket(app, Number(p1));
@@ -26,6 +28,9 @@ async function route() {
     else if (p0 === 'terms') renderTerms(app);
     else if (p0 === 'trust') renderTrust(app);
     else app.innerHTML = '<div class="empty"><h4>Page not found</h4><a href="#/">Back to markets</a></div>';
+    // every card, table and doc section animates in as it scrolls into view
+    app.querySelectorAll('.card:not(.reveal), .stats:not(.stagger), .prose > *, .doc-nav').forEach((el) => el.classList.add('reveal'));
+    reveal(app);
   } catch (e) {
     console.error(e);
     app.innerHTML = `<div class="empty"><h4>Something went wrong</h4>${(e as Error).message}</div>`;
@@ -45,6 +50,7 @@ function renderChrome() {
 
 (async () => {
   initTheme();
+  initRipples();
   // mobile nav
   const nav = document.getElementById('nav')!;
   const mob = document.createElement('nav'); mob.className = 'mobile-nav'; mob.innerHTML = nav.innerHTML;
